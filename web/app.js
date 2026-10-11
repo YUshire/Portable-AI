@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 const token = document.querySelector('meta[name=portable-token]').content;
-let messages = [], busy = false;
+let messages = [], busy = false, exiting=false;
+let timer,heartbeat;
+const clientId=crypto.randomUUID();
 async function api(route, data) {
   const res = await fetch(`/api/${route}`, { method: data === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-Portable-Token': token }, body: data === undefined ? undefined : JSON.stringify(data) });
   const result = await res.json(); if (!res.ok) throw new Error(result.error || '请求失败'); return result;
@@ -66,11 +68,15 @@ $('chat').addEventListener('submit', async event => {
     $('route').textContent = `${labels[result.backend]} · ${result.model}`;
     $('progress').textContent = `${result.fallbackReason ? `已自动切换本地：${result.fallbackReason}。` : '回复完成。'}${result.contextTrimmed ? '本地模型已缩短较早的对话上下文。' : ''}`;
   } catch (error) { messages = previous; render(); $('prompt').value = content; $('progress').textContent = error.message; }
-  finally { busy = false; $('send').disabled = false; }
+  finally { busy = false; $('send').disabled = exiting; }
 });
 $('prompt').addEventListener('keydown', event => { if (event.ctrlKey && event.key === 'Enter') $('chat').requestSubmit(); });
 $('clear').addEventListener('click', async () => { if (busy) return; try { await api('clear-history', {}); messages = []; $('messages').replaceChildren(); $('progress').textContent = '新对话已开始'; } catch (error) { $('progress').textContent = error.message; } });
-$('shutdown').addEventListener('click', async () => { if (busy && !confirm('当前请求尚未完成，确定退出？')) return; try { await api('shutdown', {}); $('progress').textContent = '服务已退出，可以安全弹出 U 盘'; $('send').disabled = true; clearInterval(timer); } catch (error) { $('progress').textContent = error.message; } });
+$('shutdown').addEventListener('click', async () => { if (busy && !confirm('将取消当前请求，保存会话并退出，确定继续？')) return; try { const result=await api('eject', {});exiting=true;$('progress').textContent = result.message; $('send').disabled = true;$('shutdown').disabled=true; clearInterval(timer);clearInterval(heartbeat); } catch (error) { $('progress').textContent = error.message; } });
+addEventListener('pagehide',()=>{if(!exiting)fetch('/api/client',{method:'POST',headers:{'Content-Type':'application/json','X-Portable-Token':token},body:JSON.stringify({id:clientId,closed:true}),keepalive:true}).catch(()=>{});});
+addEventListener('pageshow',()=>{if(!exiting)api('client',{id:clientId}).catch(()=>{});});
+await api('client',{id:clientId});
 await refresh(true);
 try { messages = (await api('history', {})).messages || []; if (messages.length) render(); } catch {}
-const timer = setInterval(() => refresh(), 2500);
+timer = setInterval(() => refresh(), 2500);
+heartbeat=setInterval(()=>{if(!exiting)api('client',{id:clientId}).catch(()=>{});},15000);

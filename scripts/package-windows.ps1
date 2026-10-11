@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$Target,
     [Parameter(Mandatory=$true)][string]$NodeExe,
     [Parameter(Mandatory=$true)][string]$OllamaDirectory,
@@ -14,7 +14,7 @@ $targetPath = [IO.Path]::GetFullPath($Target)
 if (Test-Path -LiteralPath $targetPath) { throw 'Use a new empty target directory to avoid overwriting existing data.' }
 if ($targetPath -eq [IO.Path]::GetPathRoot($targetPath)) { throw 'Target must be a subdirectory, not a drive root.' }
 New-Item -ItemType Directory -Path "$targetPath\runtime\node", "$targetPath\runtime\ollama", "$targetPath\data" -Force | Out-Null
-foreach ($item in @('server.mjs','cli.mjs','package.json','package-lock.json','THIRD-PARTY-NOTICES.md','node_modules','Start-Windows.cmd','Start-Agent-Windows.cmd','README.md','CHANGELOG.md','LICENSE','lib','web','scripts','tests','docs')) {
+foreach ($item in @('server.mjs','cli.mjs','package.json','package-lock.json','THIRD-PARTY-NOTICES.md','node_modules','Start-Windows.cmd','Start-Agent-Windows.cmd','Safe-Exit-Windows.cmd','README.md','CHANGELOG.md','LICENSE','lib','web','scripts','tests','docs')) {
     Copy-Item -LiteralPath (Join-Path $sourceRoot $item) -Destination $targetPath -Recurse
 }
 Copy-Item -LiteralPath $NodeExe -Destination "$targetPath\runtime\node\node.exe"

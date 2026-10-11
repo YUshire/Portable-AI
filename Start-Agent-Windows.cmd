@@ -1,13 +1,7 @@
 @echo off
 setlocal DisableDelayedExpansion
-if not exist "%~dp0runtime\node\node.exe" (
-  echo Portable Node.js is missing. Use the complete Windows package.
-  pause
-  exit /b 1
-)
-if "%~1"=="" (
-  "%~dp0runtime\node\node.exe" "%~dp0cli.mjs" --connect
-) else (
-  "%~dp0runtime\node\node.exe" "%~dp0cli.mjs" --connect --workspace "%~1"
-)
-pause
+set "PORTABLE_LAUNCH=%~dp0scripts\launch-windows.ps1"
+set "PORTABLE_WORKSPACE=%~1"
+cd /d "%TEMP%"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%PORTABLE_LAUNCH%" -Mode agent -Workspace "%PORTABLE_WORKSPACE%"
+exit /b %errorlevel%

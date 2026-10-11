@@ -35,6 +35,7 @@ node cli.mjs --doctor
 | `/sessions` | 查看最近 20 个会话 |
 | `/resume <ID>` | 恢复当前项目的已有会话 |
 | `/diff` | 查看文件工具产生的修改 |
+| `/eject` | 保存、退出 PortableAI 并请求 Windows 安全弹出 U 盘 |
 | `/help`、`/exit` | 帮助、退出 |
 
 Enter 提交；↑↓ 查看输入历史；PgUp/PgDn 回看；Esc/Ctrl+C 取消执行中的任务，空闲时 Ctrl+C 退出。顶部显示项目、会话和实际调用模型，任务区展示回答、工具结果和修改。

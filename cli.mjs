@@ -14,10 +14,12 @@ import { requestJson, endpoint } from './lib/providers.mjs';
 import { agentTools, WorkspaceTools } from './lib/agent-tools.mjs';
 import { createAgentRouter } from './lib/agent-provider.mjs';
 import { initialState, runAgent } from './lib/agent-loop.mjs';
+import {createLifecycle} from './lib/lifecycle.mjs';
+import {startSafeExit} from './lib/safe-exit.mjs';
 
 const root=path.dirname(fileURLToPath(import.meta.url));
 const {values:options}=parseArgs({options:{workspace:{type:'string',short:'w'},task:{type:'string',short:'t'},resume:{type:'string'},offline:{type:'boolean'},usb:{type:'boolean'},'prefer-usb':{type:'boolean'},host:{type:'boolean'},connect:{type:'boolean'},configure:{type:'boolean'},interactive:{type:'boolean'},plain:{type:'boolean'},'allow-commands':{type:'boolean'},'max-steps':{type:'string',default:'16'},'local-protocol':{type:'string',default:'auto'},'local-model':{type:'string'},'api-base':{type:'string'},model:{type:'string'},provider:{type:'string'},doctor:{type:'boolean'},help:{type:'boolean',short:'h'}}});
-if(options.help){console.log(`PortableAI coding agent 0.3.4
+if(options.help){console.log(`PortableAI coding agent 0.3.5
 node cli.mjs --workspace <project>       Persistent terminal workspace
 node cli.mjs --workspace <project> --task <request>
   --interactive               Stay in the terminal after --task
@@ -68,7 +70,7 @@ if(options.provider)config.provider=options.provider;
 if(options['local-model']){config.localModel=options['local-model'];config.preferPortable=false;}
 if(options.host)config.preferPortable=false;
 if(options['prefer-usb'])config.preferPortable=true;
-let local,state,sessionFile,diffFile,key=process.env.PORTABLE_API_KEY || '';
+let local,state,sessionFile,diffFile,lifecycle,parentWatch,key=process.env.PORTABLE_API_KEY || '';
 const event=e=>{
   if(ui){ui.event(e);return;}
   if(e.type==='fallback')console.log(`[降级] ${e.reason}`);
@@ -78,6 +80,8 @@ const event=e=>{
   if(e.type==='tool-result')console.log(`[结果${e.error?' · 错误':''}] ${JSON.stringify(e.result).slice(0,1500)}`);
 };
 try{
+  lifecycle=await createLifecycle(root,'agent',terminate);
+  const parentPid=process.ppid;parentWatch=setInterval(()=>{try{process.kill(parentPid,0);}catch{terminate();}},2000);parentWatch.unref();
   const unlockSaved=async()=>{
     try{return unseal(JSON.parse(await fs.readFile(path.join(root,'data','key.enc.json'),'utf8')),process.env.PORTABLE_VAULT_PASSWORD || await secret('解锁已保存密钥的密码（不显示）： '));}
     catch(e){if(e.code==='ENOENT')return '';throw e;}
@@ -94,7 +98,7 @@ try{
   }else if(options.doctor){
     const models=await local.existing();const capabilities=[];
     for(const m of models){try {const info=await requestJson('http://127.0.0.1:11434/api/show',{model:m.name},{},3000);capabilities.push({name:m.name,capabilities:info.capabilities,remote:!!(info.remote_host||info.remote_model)});}catch{capabilities.push({name:m.name,error:'无法读取能力'});}}
-    console.log(JSON.stringify({version:'0.3.4',platform:process.platform,arch:process.arch,node:process.version,memoryGB:Math.round(os.totalmem()/1e9),bundle:await bundleInfo(path.join(root,'models')),cacheRoot:local.cacheRoot,hostModels:capabilities,cloudEnabled:config.cloudEnabled,keyInEnvironment:!!process.env.PORTABLE_API_KEY,commandApproval:'terminal confirmation unless --allow-commands'},null,2));
+    console.log(JSON.stringify({version:'0.3.5',platform:process.platform,arch:process.arch,node:process.version,memoryGB:Math.round(os.totalmem()/1e9),bundle:await bundleInfo(path.join(root,'models')),cacheRoot:local.cacheRoot,hostModels:capabilities,cloudEnabled:config.cloudEnabled,keyInEnvironment:!!process.env.PORTABLE_API_KEY,commandApproval:'terminal confirmation unless --allow-commands'},null,2));
   }else{
     const sessionDir=path.join(root,'data','agent-sessions');await fs.mkdir(sessionDir,{recursive:true});
     const newId=()=>new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomBytes(4).toString('hex');
@@ -143,7 +147,8 @@ try{
     const command=async text=>{
       const [name,...args]=text.trim().split(/\s+/);const value=args.join(' ');
       if(name==='/exit'||name==='/quit')return false;
-      if(name==='/help')say('info','终端命令','/connect 交互配置 API 和降级方式\n/model cloud|usb|host 切换调用方式\n/new 开始新会话（保留实际文件修改）\n/sessions 列出会话；/resume <ID> 恢复本项目会话\n/status 当前设置；/diff 查看文件工具修改\n/exit 退出；Esc/Ctrl+C 取消正在执行的任务\nEnter 提交，↑↓ 输入历史，PgUp/PgDn 回看。');
+      if(name==='/eject'){await startSafeExit(root);say('info','正在安全退出','请等待 Windows 安全弹出结果窗口；收到成功确认后再拔盘。');return false;}
+      if(name==='/help')say('info','终端命令','/connect 交互配置 API 和降级方式\n/model cloud|usb|host 切换调用方式\n/new 开始新会话（保留实际文件修改）\n/sessions 列出会话；/resume <ID> 恢复本项目会话\n/status 当前设置；/diff 查看文件工具修改\n/eject 保存、退出并请求 Windows 安全弹出\n/exit 退出；Esc/Ctrl+C 取消正在执行的任务\nEnter 提交，↑↓ 输入历史，PgUp/PgDn 回看。');
       else if(name==='/status'||name==='/model'&&!value)say('info','当前连接',`${connectionLabel()}\nAPI：${config.baseUrl}\n本地模型：${config.localModel||'自动选择'}\n命令：${options['allow-commands']?'本次会话已授权':'逐条确认'}\n会话：${sessionId}\n累计模型步骤：${state.steps}`);
       else if(name==='/model'){
         if(!['cloud','usb','host'].includes(value))throw new Error('用法：/model cloud|usb|host');
@@ -189,4 +194,4 @@ try{
     console.log(`会话记录：${sessionFile}\n文件差异：${diffFile}`);
   }
 }catch(error){console.error(error.message);process.exitCode=controller.signal.aborted?130:1;}
-finally{ui?.close();rl?.close();await local?.stop();process.removeListener('SIGINT',abort);process.removeListener('SIGTERM',terminate);}
+finally{ui?.close();rl?.close();clearInterval(parentWatch);try{await local?.stop();}finally{await lifecycle?.close();}process.removeListener('SIGINT',abort);process.removeListener('SIGTERM',terminate);}
