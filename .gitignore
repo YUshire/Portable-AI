@@ -16,3 +16,14 @@ node_modules/
 *.incomplete
 *.partial
 *.zip
+*.bin
+*.sqlite
+*.sqlite-*
+*.db
+*.jsonl
+*.pem
+*.key
+auth.json
+credentials.json
+/outputs/
+/work/

@@ -1,71 +1,98 @@
-# PortableAI USB 0.3.4
+# PortableAI
 
-Windows x64 便携聊天入口，支持用户自己的 Anthropic API、兼容 Chat Completions 的 API，以及电脑或随盘 Ollama 模型。聊天界面保留；新增命令行 coding agent，支持读取项目、修改文件、执行测试并根据结果继续修复。
+**把 AI 编程工作区装进 U 盘，按需使用云端 API 或本地模型。**
 
+PortableAI 提供持续交互的命令行编程工作区与浏览器聊天入口。你可以填写自己的 API 地址、模型和密钥，也可以使用电脑或 U 盘中的 Ollama 聊天模型。开启自动降级后，云端请求失败会转用本地模型，继续当前任务。
 
-## 编程代理入口
+当前版本：**v0.3.4 · 预览版**。已验证 Windows x64；仓库发布源码，不包含模型权重、个人配置或完整便携运行环境。
 
-双击 `Start-Agent-Windows.cmd`，先选择云端 API / U 盘模型 / 电脑模型 / 已保存设置。云端引导会询问接口类型、地址、模型 ID、密钥及降级方式，再输入项目路径和任务。也可在 PortableAI 目录执行：
+## 改进设计
 
-```cmd
-runtime\node\node.exe cli.mjs --workspace "D:\MyProject"
-runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --task "修复函数并运行测试"
-runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --usb --task "检查并修复加法实现"
-runtime\node\node.exe cli.mjs --doctor
-```
+| 设计 | 使用体验 |
+|---|---|
+| 云端优先，本地接续 | 支持 Anthropic API 和兼容 Chat Completions 的接口；可以开启失败后自动降级，或直接指定本地模型 |
+| 持续编程工作区 | 完成一轮后继续输入，保留当前上下文；支持读取项目、修改文件、运行命令和根据测试结果继续修复 |
+| 按存储条件准备模型 | 检查文件系统、权重布局与可用空间；完整权重优先直接读取，必要时使用已有电脑权重或缓存 |
+| 会话随设备携带 | 从 U 盘版本启动时，会话、配置与文件修改记录保存在 U 盘的 data/ 中，可恢复已有会话 |
+| 清晰的终端层级 | 正文跟随终端前景色，边框和辅助信息使用灰色，状态少量用色；支持中文、输入历史和对话回看 |
+| 可选择的使用入口 | CLI 面向编程任务，网页入口面向聊天；两者共用连接配置 |
 
-云端与本地共用连接配置。`--usb` 强制离线随盘模型；`--prefer-usb` 用于云端失败后的随盘降级。默认逐条确认命令，`--allow-commands` 显式授权本次命令执行。用 `--resume <会话ID>` 恢复任务，记录和文件差异保存在 data/agent-sessions/。
+## 快速开始
 
-支持原生工具调用及实验性的 JSON 决策。随盘 MindBridge 已通过真实小项目离线修复测试和模拟云端故障后的真实本地修复测试。其复杂编程能力仍由模型决定，不等同于 Claude Code。详细说明见 [docs/AGENT.md](docs/AGENT.md)。
-## 使用和路由
+### 使用源码
 
-1. 完整运行包放到 U 盘，双击 Start-Windows.cmd。源码包不包含运行程序和模型；开发可用 Node.js 22+ 执行 node server.mjs --open。
-2. 启用云端 API，填写基础地址、模型 ID、密钥并保存。Anthropic 地址为 https://api.anthropic.com/v1；兼容接口通常以 /v1 结尾，不附加 /messages 或 /chat/completions。
-3. 云端启用时优先调用云端，成功时不加载本地权重。自动降级启用后，网络、超时、HTTP 错误（含密钥、余额、模型错误）、缺失密钥或无效回复均转本地，界面显示云端失败原因。关闭降级则直接报告错误。
-4. 默认使用选定的电脑 Ollama 聊天模型，缺失时加载随盘模型。未指定时自动寻找电脑聊天模型；向量模型和云模型不用于离线聊天。“本地与降级优先使用 U 盘模型”跳过电脑 Ollama。
-5. “仅用本地模型”跳过云端；“仅用 U 盘模型”同时跳过云端与电脑 Ollama。
-6. API 密钥默认仅存内存；可用至少 8 位密码加密保存，下次需要解锁。配置、日志和对话在 data/，不得提交 GitHub。
-7. 使用“退出并清理”，等待程序退出后安全弹出 U 盘。关闭浏览器不停止服务。
+需要 Node.js 22 或更新版本。使用电脑模型时，还需要运行 Ollama 并准备可用的聊天模型。
 
-## 自定义模型与存储方式
-
-模型名、大小不写死，界面读取 models/catalog.json。可导入自己有权使用的 Ollama 聊天模型。一个 models 目录携带一个模型；更换时用新的空目标目录，避免旧分块残留。
-
-启动时自动检测实际文件系统与模型布局。完整权重优先直接读取；分块且所在磁盘能容纳完整文件、空间与写入条件允许时，在 models/.portable-store 内合并并直接读取。FAT32 单文件上限为 4 GiB−1 字节，超过上限的分块权重才需合并到电脑缓存；小于上限的模型可直接留在 FAT32 上运行。缓存默认 %LOCALAPPDATA%/PortableAI/models，后续复用已校验缓存，可用 PORTABLE_AI_CACHE 指定其他磁盘。程序不格式化 U 盘。
-
-```text
-node scripts/import-model.mjs <Ollama模型根目录> <清单相对路径> <新的随盘models目录> <模型名称>
-```
-
-exFAT/NTFS 等可容纳完整权重的 U 盘，可加 --direct 导出完整 blobs/manifests。运行时直接读取 U 盘权重，不回迁模型；首次启动校验 SHA-256。速度取决于 U 盘，仍需足够内存及适合的 CPU/GPU。
-
-```text
-node scripts/import-model.mjs <Ollama模型根目录> <清单相对路径> <新的随盘models目录> <模型名称> --direct
-```
-
-程序不会格式化 U 盘，源码不附带个人微调模型。没有随盘模型仍可使用云端或电脑 Ollama。GGUF 需先在 Ollama 注册；BERT/ONNX 权重不能直接当聊天模型导入。
-
-## 功能边界
-
-- Windows x64 已实测；macOS、Linux、ARM64 和手机尚未提供经过验证的运行包。
-- 完整 Windows 包需要 runtime/node/node.exe、runtime/ollama/ollama.exe 和对应运行库；它们独立于源码发布，需附带各自许可。
-- 云端默认超时 20 秒，本地回复等待最长 240 秒；本地上下文 4096 token，回复最多 1024 token，长对话截取近期历史。
-- 仅监听 127.0.0.1，不提供局域网入口。强制终止可能留下子进程，应使用退出按钮或 Ctrl+C。
-
-## 开发与验证
-
-终端界面使用 Ink / React，开发需要 Node.js 22+；完整 U 盘运行包已携带依赖：
-
-```text
+```powershell
+git clone https://github.com/YUshire/Portable-AI.git
+cd Portable-AI
 npm ci
-node --test tests/*.test.mjs
+node cli.mjs --connect
+```
+
+连接菜单可以选择云端 API、U 盘模型、电脑模型或已保存设置。选择云端后填写接口类型、基础地址、模型 ID 和密钥，再选择项目目录开始任务。源码本身不包含 U 盘模型；准备好完整便携运行包后，才能使用随盘模型入口。
+
+浏览器聊天入口：
+
+```powershell
 node server.mjs --open
 ```
 
-测试覆盖云端优先、API 协议、错误降级、关闭降级、强制离线、自定义模型、直接读取、分块完整性和密钥加密。
+### 使用完整便携运行包
 
-## 来源与下一版
+准备好对应平台的运行程序和自行导入的模型后，将整个目录放到 U 盘：
 
-本实验从 [Claude-Portable](https://github.com/goddeng/Claude-Portable) 的便携部署需求发展，保留其 MIT 许可。此独立入口不依赖原项目共享 OAuth、激活码或授权服务器。
+- `Start-Agent-Windows.cmd`：打开编程工作区。
+- `Start-Windows.cmd`：打开浏览器聊天入口。
 
-原项目封装 Claude Code CLI；[OpenClaude](https://github.com/Twigpine/openclaude) 提供云端/本地 coding-agent CLI。0.3.0 已加入持续终端界面；0.2.1 已加入命令行云端配置引导与独立 agent 闭环；使用、恢复、命令权限和测试边界见 [Agent 使用指南](docs/AGENT.md)。
+Windows x64 是目前经过验证的平台。准备说明见 [便携部署指南](docs/PORTABLE.md)。
+
+## 连接与模型选择
+
+- **云端优先**：使用自有 API；请求成功时无需加载本地模型。
+- **自动降级**：云端请求失败后，按设置选择电脑模型或随盘模型；当前轮继续使用已选定的本地模型。
+- **仅用 U 盘模型**：跳过云端与电脑 Ollama 服务，启动随盘运行环境；权重读取位置仍按实际存储能力判断。
+- **仅用电脑模型**：使用电脑 Ollama 服务中的可用聊天模型，找不到时明确提示。
+
+API 地址填写基础地址，兼容接口通常以 `/v1` 结尾。密钥默认仅在内存中使用，也可选择密码加密保存；下次启动需要解锁。
+
+## 常用命令
+
+| 命令 | 用途 |
+|---|---|
+| `/connect` | 修改 API、模型和降级设置 |
+| `/model cloud`、`/model usb`、`/model host` | 切换使用方式 |
+| `/status` | 查看当前连接、模型与会话 |
+| `/new` | 新建会话 |
+| `/sessions`、`/resume <ID>` | 查看或恢复已有会话 |
+| `/diff` | 查看文件工具产生的修改 |
+| `/help`、`/exit` | 帮助或退出 |
+
+Enter 提交，↑↓ 查看输入历史，PgUp/PgDn 回看；Esc 或 Ctrl+C 取消当前任务。详见 [Agent 使用指南](docs/AGENT.md)。
+
+## 模型存储与会话
+
+模型名称与大小由导入的模型决定，没有固定的“首次必回迁 4.7 GB”要求。exFAT、NTFS 等支持大文件的文件系统可以直接存放完整权重。FAT32 单文件上限是 4 GiB−1 字节，超过上限的完整权重需要使用电脑上的完整文件；程序优先寻找并校验可复用权重，找不到时才还原到缓存。程序不会格式化 U 盘。
+
+CLI 会话保存在程序所在目录的 `data/agent-sessions/`，网页聊天保存在 `data/history.json`。从 U 盘启动时，这些记录在 U 盘；从源码目录启动时，则在源码目录。恢复目前要求项目路径与原记录一致。
+
+当前支持会话持久化与恢复，**尚未提供跨会话长期记忆、自动摘要或无限上下文**。聊天记录是明文保存，API 密钥的加密保存与会话存储是独立功能。
+
+## 发布内容与支持范围
+
+本仓库及源码发布包包含程序源码、启动入口、使用文档、测试与许可证。模型权重、个人会话、API 密钥、个人配置、日志、Node/Ollama 运行程序和依赖安装目录不随发布提供。
+
+- Windows x64 已验证；macOS、Linux、ARM64 和手机暂无经过验证的完整运行包。
+- 本地效果取决于模型能力、设备内存与 CPU/GPU；支持聊天不代表可靠完成复杂编程任务。
+- 命令默认逐条确认；命令使用当前用户的系统权限，不是操作系统沙箱。
+- 服务只监听本机。使用退出入口关闭程序后，再安全弹出 U 盘。
+
+本版已有 49 项自动化测试通过，并验证真实本地代码修复、模拟云端故障后的本地接续和跨进程会话恢复。这些结果不等同于完整榜单成绩或全设备兼容性保证。
+
+## 版本与许可
+
+- [v0.3.4 版本说明](docs/releases/v0.3.4.md)
+- [更新记录](CHANGELOG.md)
+- [后续方向](docs/AGENT-NEXT.md)
+
+便携使用思路参考 [Claude-Portable](https://github.com/goddeng/Claude-Portable)。PortableAI 是独立项目，需要用户自行配置 API 或模型，使用 [MIT 许可](LICENSE)。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
