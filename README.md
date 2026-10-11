@@ -1,4 +1,4 @@
-# PortableAI USB 0.3.3
+# PortableAI USB 0.3.4
 
 Windows x64 便携聊天入口，支持用户自己的 Anthropic API、兼容 Chat Completions 的 API，以及电脑或随盘 Ollama 模型。聊天界面保留；新增命令行 coding agent，支持读取项目、修改文件、执行测试并根据结果继续修复。
 

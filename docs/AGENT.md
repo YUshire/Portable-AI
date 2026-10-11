@@ -1,4 +1,10 @@
-# 便携编程代理 0.3.3
+# 便携编程代理 0.3.4
+
+## 0.3.4 终端配色
+
+CLI 使用终端默认前景色显示正文、回答、工具内容和输入，深色终端通常呈白色，浅色终端沿用深色文字。边框、会话和快捷键采用灰色；就绪状态只有圆点为绿色，错误标题为红色，错误正文保持正常前景色。遵守 NO_COLOR，不强制更改用户终端背景。参考 [Codex TUI 样式规范](https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md) 的文字层级和 [Catppuccin 配色指南](https://github.com/catppuccin/catppuccin/blob/main/docs/style-guide.md) 的中性色层级。
+
+本轮仅调整 CLI 配色，浏览器聊天页面保持原样。
 
 ## 0.3.3 自动存储判断
 
