@@ -6,7 +6,7 @@ Set-Location -LiteralPath $env:TEMP
 if($Mode -eq 'exit'){
   $folder=Join-Path $env:TEMP ('PortableAI-exit-'+[guid]::NewGuid().ToString())
   New-Item -ItemType Directory -Path $folder | Out-Null
-  foreach($name in @('windows-native.ps1','safe-exit-windows.ps1','start-exit-helper.ps1')){Copy-Item -LiteralPath (Join-Path $root ('scripts\'+$name)) -Destination (Join-Path $folder $name)}
+  foreach($name in @('windows-native.ps1','safe-exit-windows.ps1','start-exit-helper.ps1','usb-disk-info.ps1')){Copy-Item -LiteralPath (Join-Path $root ('scripts\'+$name)) -Destination (Join-Path $folder $name)}
   $manifest=Join-Path $folder 'request.json';@{root=$root;eject=$true;checkOnly=$false;quiet=$false}|ConvertTo-Json|Set-Content -LiteralPath $manifest -Encoding UTF8
   & (Join-Path $folder 'start-exit-helper.ps1') -Manifest $manifest
   exit $LASTEXITCODE

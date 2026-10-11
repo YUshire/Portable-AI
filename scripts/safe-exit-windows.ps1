@@ -54,12 +54,11 @@ try{
     else{
       . (Join-Path $PSScriptRoot 'windows-native.ps1')
       $drive=[IO.Path]::GetPathRoot($root).TrimEnd('\')
-      $logical=Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='"+$drive+"'")
-      if(-not $logical){throw '未找到设备，尚未确认安全弹出成功。'}
-      $partitions=@(Get-CimAssociatedInstance -InputObject $logical -Association Win32_LogicalDiskToPartition)
-      $disks=@($partitions|ForEach-Object{Get-CimAssociatedInstance -InputObject $_ -Association Win32_DiskDriveToDiskPartition}|Sort-Object DeviceID -Unique)
-      if($disks.Count -ne 1 -or $disks[0].InterfaceType -ne 'USB'){throw '应用所在磁盘未确认是 USB 设备。PortableAI 已退出，请使用系统磁盘管理功能。'}
-      [uint32]$node=0;if([PortableNative]::CM_Locate_DevNodeW([ref]$node,$disks[0].PNPDeviceID,0) -ne 0){throw '无法定位 USB 设备。'}
+      $ps=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+      $diskText=& $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'usb-disk-info.ps1') -Drive $drive
+      if($LASTEXITCODE -ne 0){throw '无法确认应用所在磁盘是可弹出的 USB 设备，未执行强制卸载。'}
+      $diskInfo=($diskText -join "`n")|ConvertFrom-Json
+      [uint32]$node=0;if([PortableNative]::CM_Locate_DevNodeW([ref]$node,$diskInfo.pnpDeviceId,0) -ne 0){throw '无法定位 USB 设备。'}
       $found=$false
       for($i=0;$i -lt 8;$i++){
         $deviceId=New-Object Text.StringBuilder 1024
@@ -68,9 +67,27 @@ try{
         [uint32]$parent=0;if([PortableNative]::CM_Get_Parent([ref]$parent,$node,0) -ne 0){break};$node=$parent
       }
       if(-not $found){throw '无法安全识别 USB 设备，未执行强制卸载。'}
-      [int]$veto=0;$vetoName=New-Object Text.StringBuilder 1024
-      $code=[PortableNative]::CM_Request_Device_EjectW($node,[ref]$veto,$vetoName,1024,0)
-      if($code -ne 0){throw ('Windows 拒绝安全弹出。错误码='+$code+'；阻止类型='+$veto+'；占用来源='+$vetoName.ToString()+'。请关闭其他占用此 U 盘的应用后重试。')}
+      for($attempt=1;$attempt -le 3;$attempt++){
+        [int]$veto=0;$vetoName=New-Object Text.StringBuilder 1024
+        [void]$vetoName.Append([char]0,1024)
+        $code=[PortableNative]::CM_Request_Device_EjectW($node,[ref]$veto,$vetoName,1024,0)
+        if($code -eq 0 -or $veto -notin @(2,5,6)){break}
+        if($attempt -lt 3){Start-Sleep -Milliseconds 600}
+      }
+      if($code -ne 0){
+        $result.errorCode=$code;$result.vetoType=$veto;$result.deviceSource=$vetoName.ToString().Split([char]0)[0];$result.attempts=[Math]::Min($attempt,3)
+        $reason=switch($veto){
+          2 {'设备还在关闭文件，请稍后重试。'}
+          3 {'Windows 报告有应用阻止弹出，请关闭使用此 U 盘的文件或窗口后重试。'}
+          4 {'Windows 报告有系统服务阻止弹出。'}
+          5 {'磁盘仍有未释放的文件句柄，Windows 未提供具体程序名称。'}
+          6 {'设备或磁盘卷拒绝移除，Windows 未提供具体程序名称。'}
+          7 {'设备驱动拒绝移除。'}
+          12 {'当前用户权限不足，Windows 未允许弹出。'}
+          default {'Windows 尚未允许安全移除该设备。'}
+        }
+        throw ('PortableAI 后台已停止，但 U 盘尚未安全弹出。'+"`n"+$reason+"`n"+'请使用 Windows 的“安全删除硬件”再次确认；确认成功前请勿拔出。')
+      }
       $result.status='ejected';$result.systemEjectConfirmed=$true;$result.message='Windows 已确认安全弹出，现在可以拔出 U 盘。'
     }
   }
