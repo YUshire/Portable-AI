@@ -1,8 +1,8 @@
-# 便携编程代理 0.2.0
+# 便携编程代理 0.2.1
 
 ## 启动
 
-Windows 完整 U 盘运行包：双击 `Start-Agent-Windows.cmd`，填写项目文件夹路径，输入任务。原来的 `Start-Windows.cmd` 继续启动聊天界面。
+Windows 完整 U 盘运行包：双击 `Start-Agent-Windows.cmd`，先选择连接方式。默认进入云端 API 配置，询问接口类型、基础地址、模型 ID、密钥（不回显）、降级选项和是否加密保存，然后填写项目文件夹路径和任务。也可选仅用 U 盘、仅用电脑或已保存设置。原来的 `Start-Windows.cmd` 继续启动聊天界面。
 
 命令行方式（在 PortableAI 目录中）：
 
@@ -60,3 +60,9 @@ node scripts/smoke-agent.mjs <完整运行包目录> <报告.json> fallback
 ```
 
 真实 smoke 使用独立临时项目，真实修改文件和执行断言，保留会话与报告。不会改用户项目或保存个人 API 密钥；fallback 服务使用本机模拟 HTTP 503。
+
+## 0.2.1 连接与缓存修正
+
+运行 node cli.mjs --configure 可只配置云端并退出，不加载本地模型。node cli.mjs --connect 会显示连接菜单。非交互自动任务继续支持原有 --api-base/--model/--provider 参数和 PORTABLE_API_KEY。
+
+程序现在先打印连接方式，再开始任务。选云端时成功请求不会还原模型。分块模型准备时会显示实际缓存路径，先验证默认缓存、OLLAMA_MODELS 指定的现有模型库以及 Codex 应用缓存目录。匹配同一清单和 SHA-256 的完整模型可直接复用；指定 PORTABLE_AI_CACHE 时只使用显式缓存位置。只有没有可复用完整权重时才合并 U 盘分块。这样可以避免 Codex 打包应用与用户双击运行访问不同缓存位置造成的重复复制。

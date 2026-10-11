@@ -8,16 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { Writable } from 'node:stream';
 import { LocalRuntime } from './lib/local-runtime.mjs';
 import { bundleInfo } from './lib/model-store.mjs';
-import { unseal } from './lib/vault.mjs';
+import { seal, unseal } from './lib/vault.mjs';
+import { setupConnection } from './lib/connection-setup.mjs';
 import { requestJson, endpoint } from './lib/providers.mjs';
 import { agentTools, WorkspaceTools } from './lib/agent-tools.mjs';
 import { createAgentRouter } from './lib/agent-provider.mjs';
 import { initialState, runAgent } from './lib/agent-loop.mjs';
 
 const root=path.dirname(fileURLToPath(import.meta.url));
-const {values:options}=parseArgs({options:{workspace:{type:'string',short:'w'},task:{type:'string',short:'t'},resume:{type:'string'},offline:{type:'boolean'},usb:{type:'boolean'},'prefer-usb':{type:'boolean'},host:{type:'boolean'},'allow-commands':{type:'boolean'},'max-steps':{type:'string',default:'16'},'local-protocol':{type:'string',default:'auto'},'local-model':{type:'string'},'api-base':{type:'string'},model:{type:'string'},provider:{type:'string'},doctor:{type:'boolean'},help:{type:'boolean',short:'h'}}});
-if(options.help){console.log(`PortableAI coding agent 0.2.0
+const {values:options}=parseArgs({options:{workspace:{type:'string',short:'w'},task:{type:'string',short:'t'},resume:{type:'string'},offline:{type:'boolean'},usb:{type:'boolean'},'prefer-usb':{type:'boolean'},host:{type:'boolean'},connect:{type:'boolean'},configure:{type:'boolean'},'allow-commands':{type:'boolean'},'max-steps':{type:'string',default:'16'},'local-protocol':{type:'string',default:'auto'},'local-model':{type:'string'},'api-base':{type:'string'},model:{type:'string'},provider:{type:'string'},doctor:{type:'boolean'},help:{type:'boolean',short:'h'}}});
+if(options.help){console.log(`PortableAI coding agent 0.2.1
 node cli.mjs --workspace <project> --task <request>
+  --connect                   Choose cloud API or local model interactively
+  --configure                 Configure and save cloud API, then exit
   --offline                   Skip cloud APIs
   --usb                       Skip cloud and host Ollama; use USB model
   --prefer-usb                Use USB model when falling back from cloud
@@ -41,9 +44,11 @@ const controller=new AbortController();
 const abort=()=>{if(!controller.signal.aborted) controller.abort(new Error('用户已取消任务'));};
 process.once('SIGINT',abort);process.once('SIGTERM',abort);
 let rl;
-const ask=async prompt=>{if(!process.stdin.isTTY) throw new Error('非交互运行需显式提供参数');rl ||= readline.createInterface({input:process.stdin,output:process.stdout});rl.on('SIGINT',abort);return rl.question(prompt,{signal:controller.signal});};
+const ask=async prompt=>{if(!process.stdin.isTTY) throw new Error('非交互运行需显式提供参数');if(!rl){rl=readline.createInterface({input:process.stdin,output:process.stdout});rl.on('SIGINT',abort);}return rl.question(prompt,{signal:controller.signal});};
 async function secret(prompt){
   if(!process.stdin.isTTY) throw new Error('需要 API 密钥，请设置 PORTABLE_API_KEY 或在终端解锁密钥');
+  // Avoid two readline interfaces handling the same keystrokes or echoing secrets.
+  rl?.close();rl=undefined;
   process.stdout.write(prompt);
   const hidden=new Writable({write(chunk,encoding,done){done();}});
   const reader=readline.createInterface({input:process.stdin,output:hidden,terminal:true}); reader.on('SIGINT',abort);
@@ -57,7 +62,7 @@ if(options.provider)config.provider=options.provider;
 if(options['local-model']){config.localModel=options['local-model'];config.preferPortable=false;}
 if(options.host)config.preferPortable=false;
 if(options['prefer-usb'])config.preferPortable=true;
-let local,state,sessionFile,diffFile;
+let local,state,sessionFile,diffFile,key=process.env.PORTABLE_API_KEY || '';
 const event=e=>{
   if(e.type==='fallback')console.log(`[降级] ${e.reason}`);
   if(e.type==='model')console.log(`[第 ${e.step} 轮 · ${e.backend} · ${e.model}${e.protocol?' · '+e.protocol:''}]${e.text?'\n'+e.text:''}`);
@@ -66,21 +71,32 @@ const event=e=>{
   if(e.type==='tool-result')console.log(`[结果${e.error?' · 错误':''}] ${JSON.stringify(e.result).slice(0,1500)}`);
 };
 try{
+  const unlockSaved=async()=>{
+    try{return unseal(JSON.parse(await fs.readFile(path.join(root,'data','key.enc.json'),'utf8')),process.env.PORTABLE_VAULT_PASSWORD || await secret('解锁已保存密钥的密码（不显示）： '));}
+    catch(e){if(e.code==='ENOENT')return '';throw e;}
+  };
+  if(options.connect||options.configure||(!options.task&&!options.resume&&!options.doctor&&!options.offline&&!options.usb&&!options['api-base']&&process.stdin.isTTY)){
+    const connection=await setupConnection({config,key,ask,secret,unlockSaved,configureOnly:!!options.configure,saveConfig:async value=>{await fs.mkdir(path.join(root,'data'),{recursive:true});await fs.writeFile(path.join(root,'data','config.json'),JSON.stringify(value,null,2));},saveKey:async(value,password)=>{const vault=seal(value,password);await fs.mkdir(path.join(root,'data'),{recursive:true});await fs.writeFile(path.join(root,'data','key.enc.json'),JSON.stringify(vault),{mode:0o600});}});
+    config=connection.config;key=connection.key;options.offline=connection.offline;options.usb=connection.portableOnly;
+    if(options.configure){console.log(`云端 API 配置已保存：${config.provider} · ${config.model}。未加载本地模型。`);}
+  }
+  if(!options.doctor&&!options.configure)console.log(options.usb?'连接：仅用 U 盘模型':options.offline?'连接：仅用电脑本地模型':config.cloudEnabled?`连接：云端 API 优先 · ${config.provider} · ${config.model} · ${config.autoFallback?'失败后降级':'不自动降级'}`:'连接：云端 API 未启用，使用本地模型。配置云端可运行 --configure。');
   local=new LocalRuntime(root,value=>console.log(`[本地] ${value}`));
-  if(options.doctor){
+  if(options.configure){
+    // Configuration must not restore model weights or create an agent session.
+  }else if(options.doctor){
     const models=await local.existing();const capabilities=[];
     for(const m of models){try {const info=await requestJson('http://127.0.0.1:11434/api/show',{model:m.name},{},3000);capabilities.push({name:m.name,capabilities:info.capabilities,remote:!!(info.remote_host||info.remote_model)});}catch{capabilities.push({name:m.name,error:'无法读取能力'});}}
-    console.log(JSON.stringify({version:'0.2.0',platform:process.platform,arch:process.arch,node:process.version,memoryGB:Math.round(os.totalmem()/1e9),bundle:await bundleInfo(path.join(root,'models')),hostModels:capabilities,cloudEnabled:config.cloudEnabled,keyInEnvironment:!!process.env.PORTABLE_API_KEY,commandApproval:'terminal confirmation unless --allow-commands'},null,2));
+    console.log(JSON.stringify({version:'0.2.1',platform:process.platform,arch:process.arch,node:process.version,memoryGB:Math.round(os.totalmem()/1e9),bundle:await bundleInfo(path.join(root,'models')),cacheRoot:local.cacheRoot,hostModels:capabilities,cloudEnabled:config.cloudEnabled,keyInEnvironment:!!process.env.PORTABLE_API_KEY,commandApproval:'terminal confirmation unless --allow-commands'},null,2));
   }else{
     const sessionDir=path.join(root,'data','agent-sessions');await fs.mkdir(sessionDir,{recursive:true});
     const sessionId=options.resume || new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomBytes(4).toString('hex');
     if(!/^[A-Za-z0-9_-]{1,100}$/.test(sessionId))throw new Error('会话 ID 无效');
     sessionFile=path.join(sessionDir,sessionId+'.json');diffFile=path.join(sessionDir,sessionId+'.diff');
     if(options.resume){state=JSON.parse(await fs.readFile(sessionFile,'utf8'));if(state.version!==1||!Array.isArray(state.history))throw new Error('会话格式不支持');}
-    const workspace=await fs.realpath(options.workspace || state?.workspace || process.cwd());
+    const workspace=await fs.realpath(options.workspace || state?.workspace || (process.stdin.isTTY?await ask('项目文件夹路径： '):process.cwd()));
     if(state && state.workspace!==workspace)throw new Error('恢复会话必须使用原项目目录');
     if(!state)state=initialState(workspace);
-    let key=process.env.PORTABLE_API_KEY || '';
     if(!options.offline&&!options.usb&&config.cloudEnabled&&!key){
       try {const vault=JSON.parse(await fs.readFile(path.join(root,'data','key.enc.json'),'utf8'));key=unseal(vault,process.env.PORTABLE_VAULT_PASSWORD || await secret('解锁密钥密码（不显示）：'));}
       catch(e){if(e.code!=='ENOENT'){if(!config.autoFallback)throw e;console.log(`[密钥未解锁] ${e.message}，按设置降级`);}}
