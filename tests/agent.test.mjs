@@ -101,6 +101,25 @@ test('completion-only Ollama uses schema JSON decisions; native mode refuses uns
   const fixture=await mock((req,res,body)=>{if(req.url==='/api/show'){res.end(JSON.stringify({capabilities:['completion']}));return;}assert.equal(body.format.type,'object');assert.equal(body.tools,undefined);res.end(JSON.stringify({message:{content:JSON.stringify({action:'write_file',text:'',arguments:{path:'x',content:'y'}})}}));});
   try{const target={base:fixture.base,model:'custom'};const result=await localAgent(target,initialState('.').history,agentTools);assert.equal(result.calls[0].name,'write_file');assert.equal(result.protocol,'json-experimental');await assert.rejects(localAgent(target,[],agentTools,'native'),/未声明/);}finally{await fixture.close();}
 });
+
+test('JSON finish returns the actual answer and keeps a follow-up question in context',async()=>{
+  const model='custom-model-alias';let calls=0;
+  const fixture=await mock((req,res,body)=>{
+    if(req.url==='/api/show'){res.end(JSON.stringify({capabilities:['completion']}));return;}
+    const system=body.messages[0].content;
+    assert.match(system,/text MUST contain the actual complete answer/);assert.match(system,/A question is a valid request/);assert.match(system,/Runtime model identifier.*custom-model-alias/);
+    assert.ok(!system.includes('text is your summary'));
+    if(++calls===2){assert.equal(body.messages.at(-1).content,'You did not answer my question');assert.ok(body.messages.some(m=>m.content==='What model are you?'));}
+    res.end(JSON.stringify({message:{content:JSON.stringify({action:'finish',text:'The loaded model is custom-model-alias.',arguments:{}})}}));
+  });
+  try{
+    const history=[...initialState('.').history,{role:'user',content:'What model are you?'}];
+    const first=await localAgent({base:fixture.base,model},history,agentTools);
+    assert.equal(first.text,'The loaded model is custom-model-alias.');assert.deepEqual(first.calls,[]);
+    history.push({role:'assistant',content:first.text,calls:[]},{role:'user',content:'You did not answer my question'});
+    assert.equal((await localAgent({base:fixture.base,model},history,agentTools)).text,first.text);
+  }finally{await fixture.close();}
+});
 test('cancellation aborts owned command and checkpoints the session',()=>project(async root=>{
   const controller=new AbortController(),tools=new WorkspaceTools(root,{signal:controller.signal,approve:async()=>true});await tools.init();const state=initialState(root);let saved;
   const timer=setTimeout(()=>controller.abort(new Error('test cancelled')),200);
