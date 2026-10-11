@@ -1,4 +1,4 @@
-# PortableAI USB 0.3.2
+# PortableAI USB 0.3.3
 
 Windows x64 便携聊天入口，支持用户自己的 Anthropic API、兼容 Chat Completions 的 API，以及电脑或随盘 Ollama 模型。聊天界面保留；新增命令行 coding agent，支持读取项目、修改文件、执行测试并根据结果继续修复。
 
@@ -31,7 +31,7 @@ runtime\node\node.exe cli.mjs --doctor
 
 模型名、大小不写死，界面读取 models/catalog.json。可导入自己有权使用的 Ollama 聊天模型。一个 models 目录携带一个模型；更换时用新的空目标目录，避免旧分块残留。
 
-FAT32 单文件不能达到 4 GiB。大模型需分块携带，Ollama 运行前必须合并完整权重到支持其大小的位置。首次还原到 %LOCALAPPDATA%/PortableAI/models，后续复用已验证缓存。可用 PORTABLE_AI_CACHE 指定缓存位置。空间需求由实际模型决定，缓存会留在电脑。
+启动时自动检测实际文件系统与模型布局。完整权重优先直接读取；分块且所在磁盘能容纳完整文件、空间与写入条件允许时，在 models/.portable-store 内合并并直接读取。FAT32 单文件上限为 4 GiB−1 字节，超过上限的分块权重才需合并到电脑缓存；小于上限的模型可直接留在 FAT32 上运行。缓存默认 %LOCALAPPDATA%/PortableAI/models，后续复用已校验缓存，可用 PORTABLE_AI_CACHE 指定其他磁盘。程序不格式化 U 盘。
 
 ```text
 node scripts/import-model.mjs <Ollama模型根目录> <清单相对路径> <新的随盘models目录> <模型名称>

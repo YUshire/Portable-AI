@@ -17,7 +17,7 @@ import { initialState, runAgent } from './lib/agent-loop.mjs';
 
 const root=path.dirname(fileURLToPath(import.meta.url));
 const {values:options}=parseArgs({options:{workspace:{type:'string',short:'w'},task:{type:'string',short:'t'},resume:{type:'string'},offline:{type:'boolean'},usb:{type:'boolean'},'prefer-usb':{type:'boolean'},host:{type:'boolean'},connect:{type:'boolean'},configure:{type:'boolean'},interactive:{type:'boolean'},plain:{type:'boolean'},'allow-commands':{type:'boolean'},'max-steps':{type:'string',default:'16'},'local-protocol':{type:'string',default:'auto'},'local-model':{type:'string'},'api-base':{type:'string'},model:{type:'string'},provider:{type:'string'},doctor:{type:'boolean'},help:{type:'boolean',short:'h'}}});
-if(options.help){console.log(`PortableAI coding agent 0.3.2
+if(options.help){console.log(`PortableAI coding agent 0.3.3
 node cli.mjs --workspace <project>       Persistent terminal workspace
 node cli.mjs --workspace <project> --task <request>
   --interactive               Stay in the terminal after --task
@@ -94,7 +94,7 @@ try{
   }else if(options.doctor){
     const models=await local.existing();const capabilities=[];
     for(const m of models){try {const info=await requestJson('http://127.0.0.1:11434/api/show',{model:m.name},{},3000);capabilities.push({name:m.name,capabilities:info.capabilities,remote:!!(info.remote_host||info.remote_model)});}catch{capabilities.push({name:m.name,error:'无法读取能力'});}}
-    console.log(JSON.stringify({version:'0.3.2',platform:process.platform,arch:process.arch,node:process.version,memoryGB:Math.round(os.totalmem()/1e9),bundle:await bundleInfo(path.join(root,'models')),cacheRoot:local.cacheRoot,hostModels:capabilities,cloudEnabled:config.cloudEnabled,keyInEnvironment:!!process.env.PORTABLE_API_KEY,commandApproval:'terminal confirmation unless --allow-commands'},null,2));
+    console.log(JSON.stringify({version:'0.3.3',platform:process.platform,arch:process.arch,node:process.version,memoryGB:Math.round(os.totalmem()/1e9),bundle:await bundleInfo(path.join(root,'models')),cacheRoot:local.cacheRoot,hostModels:capabilities,cloudEnabled:config.cloudEnabled,keyInEnvironment:!!process.env.PORTABLE_API_KEY,commandApproval:'terminal confirmation unless --allow-commands'},null,2));
   }else{
     const sessionDir=path.join(root,'data','agent-sessions');await fs.mkdir(sessionDir,{recursive:true});
     const newId=()=>new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomBytes(4).toString('hex');

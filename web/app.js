@@ -25,7 +25,8 @@ async function refresh(initial = false) {
     $('system').textContent = `${status.system.platform} / ${status.system.arch} · ${status.system.memoryGB} GB 内存\n电脑模型：${status.models.length} 个 · U 盘模型：${status.system.bundleReady ? '已携带' : '未导入'}`;
     $('system').style.whiteSpace = 'pre-line';
     const bundle = status.bundle;
-    $('bundleHint').textContent = !bundle ? '未携带随盘模型。可使用电脑已有 Ollama，或自行导入一个聊天模型。' : bundle.storage === 'direct' ? `随盘模型：${bundle.model}（${(bundle.bytes / 1e9).toFixed(2)} GB）。完整权重直接从 U 盘读取，无需复制到电脑；速度取决于 U 盘。` : `随盘模型：${bundle.model}（${(bundle.bytes / 1e9).toFixed(2)} GB）。分块存储首次需合并到电脑缓存，之后复用。可用 PORTABLE_AI_CACHE 指定缓存位置；完整文件存储可直接从 U 盘运行。`;
+    $('bundleHint').textContent = !bundle ? '未携带随盘模型。可使用电脑已有 Ollama，或自行导入一个聊天模型。' : bundle.storage === 'direct' ? `随盘模型：${bundle.model}（${(bundle.bytes / 1e9).toFixed(2)} GB）。完整权重直接从 U 盘读取，无需复制到电脑；速度取决于 U 盘。` : `随盘模型：${bundle.model}（${(bundle.bytes / 1e9).toFixed(2)} GB）。启动时自动检查文件系统和实际权重：优先直接读取，分块能在 U 盘合并就留在盘内；受文件大小、空间或写入条件限制时才使用电脑缓存。`;
+    if(status.storageNotes?.length)$('bundleHint').textContent+=' 最近一次随盘存储判断：'+status.storageNotes.join('；');
     $('keyState').textContent = status.keyReady ? 'API 密钥已就绪（不会显示在界面中）' : status.keySaved ? '已有加密密钥，请输入密码解锁' : '未配置 API 密钥，可以直接测试本地模型';
     if (status.busy) $('progress').textContent = status.progress;
     $('send').disabled = busy || status.busy;

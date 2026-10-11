@@ -17,8 +17,9 @@ const configFile = path.join(dataDir, 'config.json'), vaultFile = path.join(data
 let config = { provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', model: '', cloudEnabled: false, autoFallback: true, localModel: '' };
 try { config = { ...config, ...JSON.parse(await fs.promises.readFile(configFile, 'utf8')) }; } catch {}
 let apiKey = '', progress = '就绪', busy = false;
+const storageNotes=[];
 const token = crypto.randomBytes(32).toString('hex');
-const local = new LocalRuntime(root, value => { progress = value; });
+const local = new LocalRuntime(root, value => { progress = value;if(/文件系统|单文件上限|完整权重|完整模型|缓存位置|转用电脑缓存|无法确认/.test(value)){storageNotes.push(value);if(storageNotes.length>6)storageNotes.shift();} });
 const files = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'] };
 const json = (res, code, data) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
 async function body(req) {
@@ -44,7 +45,7 @@ const server = http.createServer(async (req, res) => {
     if (route === '/api/status' && req.method === 'GET') {
       const models = await local.existing();
       const bundle = await bundleInfo(path.join(root, 'models'));
-      return json(res, 200, { config, keyReady: !!apiKey, keySaved: fs.existsSync(vaultFile), busy, progress, bundle, models: models.map(m => ({ name: m.name, size: m.size, family: m.details?.family })), system: { platform: process.platform, arch: process.arch, memoryGB: Math.round(os.totalmem() / 1024 ** 3), bundleReady: !!bundle } });
+      return json(res, 200, { config, keyReady: !!apiKey, keySaved: fs.existsSync(vaultFile), busy, progress, bundle, storageNotes, models: models.map(m => ({ name: m.name, size: m.size, family: m.details?.family })), system: { platform: process.platform, arch: process.arch, memoryGB: Math.round(os.totalmem() / 1024 ** 3), bundleReady: !!bundle } });
     }
     if (req.method !== 'POST') return json(res, 405, { error: '不支持的请求方法' });
     const input = await body(req);
