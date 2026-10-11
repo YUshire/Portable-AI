@@ -12,4 +12,4 @@ for(const relative of Object.keys(lock.packages).filter(p=>p.startsWith('node_mo
     text+=`### ${name}\n\n${await fs.readFile(path.join(directory,name),'utf8')}\n\n`;
   }
 }
-await fs.writeFile(path.join(root,'THIRD-PARTY-NOTICES.md'),text);
+await fs.writeFile(path.join(root,'THIRD-PARTY-NOTICES.md'),text.trimEnd()+'\n');

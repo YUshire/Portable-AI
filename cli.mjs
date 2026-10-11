@@ -135,7 +135,7 @@ try{
       const request=createAgentRouter({config,key,local,tools:agentTools,offline:!!options.offline||!!options.usb,portableOnly:!!options.usb,protocol:options['local-protocol'],signal:controller.signal,onEvent:event});
       try{
         await tools.init();await runAgent({state,task,request,tools,maxSteps,signal:controller.signal,onEvent:event,save});
-        say(state.status==='completed'?'info':'error',`本轮结束 · ${state.status} · 验证 ${state.verification||'not-run'}`,state.status==='completed'?'继续输入下一项任务。':state.summary||'');
+        say(state.status==='completed'?'info':'error',`本轮结束 · ${state.status} · 验证 ${state.verification||'not-run'}`,state.status==='completed'?(interactive?'继续输入下一项任务。':'任务已完成。'):state.summary||'');
         if(!interactive){console.log(state.summary||'');if(state.status!=='completed')process.exitCode=2;}
       }catch(error){if(!interactive)throw error;say('error',controller.signal.aborted?'任务已取消，可继续输入':'本轮出错，可重试或 /connect',error.message);}
       finally{await fs.writeFile(diffFile,tools.diff(),'utf8');running=false;ui?.busy(false);controller=new AbortController();}
