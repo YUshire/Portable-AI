@@ -1,7 +1,21 @@
-# PortableAI USB 0.1.1
+# PortableAI USB 0.2.0
 
-Windows x64 便携聊天入口，支持用户自己的 Anthropic API、兼容 Chat Completions 的 API，以及电脑或随盘 Ollama 模型。本版生成聊天和代码文本，尚不自动编辑文件或运行命令。
+Windows x64 便携聊天入口，支持用户自己的 Anthropic API、兼容 Chat Completions 的 API，以及电脑或随盘 Ollama 模型。聊天界面保留；新增命令行 coding agent，支持读取项目、修改文件、执行测试并根据结果继续修复。
 
+
+## 编程代理入口
+
+双击 `Start-Agent-Windows.cmd`，输入项目路径和任务。也可在 PortableAI 目录执行：
+
+```cmd
+runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --task "修复函数并运行测试"
+runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --usb --task "检查并修复加法实现"
+runtime\node\node.exe cli.mjs --doctor
+```
+
+云端与本地共用连接配置。`--usb` 强制离线随盘模型；`--prefer-usb` 用于云端失败后的随盘降级。默认逐条确认命令，`--allow-commands` 显式授权本次命令执行。用 `--resume <会话ID>` 恢复任务，记录和文件差异保存在 data/agent-sessions/。
+
+支持原生工具调用及实验性的 JSON 决策。随盘 MindBridge 已通过真实小项目离线修复测试和模拟云端故障后的真实本地修复测试。其复杂编程能力仍由模型决定，不等同于 Claude Code。详细说明见 [docs/AGENT.md](docs/AGENT.md)。
 ## 使用和路由
 
 1. 完整运行包放到 U 盘，双击 Start-Windows.cmd。源码包不包含运行程序和模型；开发可用 Node.js 22+ 执行 node server.mjs --open。
@@ -52,4 +66,4 @@ node server.mjs --open
 
 本实验从 [Claude-Portable](https://github.com/goddeng/Claude-Portable) 的便携部署需求发展，保留其 MIT 许可。此独立入口不依赖原项目共享 OAuth、激活码或授权服务器。
 
-原项目封装 Claude Code CLI；[OpenClaude](https://github.com/Twigpine/openclaude) 提供云端/本地 coding-agent CLI。下一版将实现模型决策、工具执行、结果反馈和验证循环；保留本版作为聊天和连接管理入口。研究与下一轮方案见 docs/AGENT-NEXT.md。
+原项目封装 Claude Code CLI；[OpenClaude](https://github.com/Twigpine/openclaude) 提供云端/本地 coding-agent CLI。0.2.0 已加入独立命令行闭环；使用、恢复、命令权限和测试边界见 [Agent 使用指南](docs/AGENT.md)。

@@ -1,0 +1,62 @@
+# 便携编程代理 0.2.0
+
+## 启动
+
+Windows 完整 U 盘运行包：双击 `Start-Agent-Windows.cmd`，填写项目文件夹路径，输入任务。原来的 `Start-Windows.cmd` 继续启动聊天界面。
+
+命令行方式（在 PortableAI 目录中）：
+
+```cmd
+runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --task "修复函数并运行测试"
+runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --usb --task "检查并修复加法实现"
+runtime\node\node.exe cli.mjs --workspace "D:\MyProject" --prefer-usb --task "完成修改后运行测试"
+runtime\node\node.exe cli.mjs --doctor
+```
+
+`--usb` 强制只用随盘模型；`--prefer-usb` 保留云端优先，但本地降级选择随盘模型；`--host` 优先用电脑 Ollama。具体模型可用 `--local-model` 指定。
+
+## 云端配置
+
+读取聊天界面保存的接口类型、基础地址、模型名和降级设置。密钥默认在聊天进程内存中，新的 CLI 进程不能读取该内存；CLI 可单独输入密钥、解锁保存的加密密钥，或读取环境变量 `PORTABLE_API_KEY`。密码输入不显示。环境变量与密钥不写进 agent 会话。
+
+也可显式指定 `--provider anthropic|compatible --api-base <地址> --model <模型ID>`。源码不内置付费 API 密钥，本轮真实云端付费模型未测试；协议与故障场景通过模拟服务验证。
+
+云端请求失败后按设置降级；本轮任务余下步骤持续使用本地，避免每一步反复请求故障云端。转换保留工具调用与结果配对。`--offline` 跳过云端。
+
+## 工具与命令
+
+- `list_files`：列出项目目录。
+- `read_file`：读取 UTF-8 文件，支持行号范围。
+- `write_file`：创建/替换小型文本文件。
+- `edit_file`：只替换一个明确匹配的片段。
+- `run_command`：在项目目录用程序名和 argv 执行命令，反馈退出码与输出。
+
+文件工具检查真实路径，拒绝越界或通过目录联接访问外部文件；不操作 `.git`、`.env`，不处理二进制或超过 512 KiB 的文本文件。命令不会自动使用 shell，`node` 映射为随盘 Node，项目依赖仍需该项目实际具备。
+
+默认逐条确认命令；非交互运行默认拒绝。明确传入 `--allow-commands` 即授权本次任务执行模型选择的命令。命令具有电脑当前用户权限，**不是文件系统沙箱**，可影响项目目录之外；不要把该参数用于不信任的项目和任务。命令默认 60 秒超时，Ctrl+C 会取消请求并停止自有命令进程树。
+
+## 循环、记录与恢复
+
+模型请求 → 执行工具 → 反馈工具结果 → 再请求模型。运行测试失败后，模型有机会继续修复；同一工具连续失败三次停止，默认最多 16 轮，可用 `--max-steps 1..100` 调整。
+
+记录保存在 `data/agent-sessions/<会话ID>.json`；文本文件变化记录为同名 `.diff`。可用 `--resume <会话ID>` 恢复，必须使用原项目目录。中断时结果未知的操作不自动重放，模型先收到未知结果提示。diff 记录文件工具造成的修改，不捕获命令程序自身产生的全部文件变化。配置、会话和 diff 均排除 GitHub。
+
+最后一次命令失败、被拒绝、超时，或测试后又改了文件，会标为 `needs-review`，不会仅凭模型文字宣布验证通过。没有执行命令时 `verification=not-run`，不能解读为测试通过。会话包含完整工具结果，但上下文有容量上限，不无限循环。
+
+## 本地模型能力与本轮实测
+
+`--local-protocol auto`：模型声明原生 `tools` 能力时使用 Ollama 原生工具协议；否则使用实验性的 JSON Schema 决策。`native` 强制原生；`json` 强制结构化决策。JSON 限制返回格式，无法保证模型具备可靠的复杂编程能力。
+
+随盘 MindBridge 模型当前只声明 `completion`。本轮实测了 4 步离线修复：读取 add.mjs → 将减法改为加法 → 执行两项断言 → 完成。另一个实测模拟云端 503，降级到真实随盘模型完成同一任务。小任务通过不代表大型项目能力与 Claude Code 相当。
+
+当前完整包只验证 Windows x64。原生工具调用模型的适配器通过模拟 Ollama 验证，随盘模型走的是 JSON 决策；其他模型和其他系统应分别验证。
+
+## 开发测试
+
+```text
+node --test tests/*.test.mjs
+node scripts/smoke-agent.mjs <完整运行包目录> <报告.json> usb
+node scripts/smoke-agent.mjs <完整运行包目录> <报告.json> fallback
+```
+
+真实 smoke 使用独立临时项目，真实修改文件和执行断言，保留会话与报告。不会改用户项目或保存个人 API 密钥；fallback 服务使用本机模拟 HTTP 503。
