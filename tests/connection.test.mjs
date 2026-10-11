@@ -41,3 +41,23 @@ test('complete model in another cache is reused even when USB parts are unavaila
 test('host-only mode never starts a portable runtime when host model is absent',async()=>{
   const local=new LocalRuntime(process.cwd());local.existing=async()=>[];local.startPortable=()=>assert.fail('must not restore USB model');await assert.rejects(local.choose({hostOnly:true}),/不会还原/);
 });
+
+test('switching the connection wizard from host-only to USB clears the restriction and selects USB',async()=>{
+  const host=await wizard(['3'],[]).run();assert.equal(host.config.hostOnly,true);
+  const usb=await wizard(['2'],[],{config:host.config}).run();
+  assert.equal(usb.config.hostOnly,false);assert.equal(usb.config.preferPortable,true);assert.equal(usb.portableOnly,true);
+  const local=new LocalRuntime(process.cwd());local.existing=()=>assert.fail('USB mode must not look for host models');
+  const target={backend:'usb-local',model:'fixture',base:'http://127.0.0.1:1'};local.startPortable=async()=>target;
+  assert.deepEqual(await local.choose(usb.config,usb.portableOnly),target);
+});
+test('explicit USB mode overrides stale host-only config at the runtime boundary',async()=>{
+  const local=new LocalRuntime(process.cwd());local.existing=()=>assert.fail('must skip host discovery');
+  let starts=0;local.startPortable=async()=>{starts++;return {backend:'usb-local'};};
+  assert.equal((await local.choose({hostOnly:true},true)).backend,'usb-local');
+  assert.equal((await local.choose({hostOnly:true},true)).backend,'usb-local');assert.equal(starts,1);
+});
+test('returning from host-only to saved cloud settings permits local fallback',async()=>{
+  const saved={...config,hostOnly:true,cloudEnabled:true};
+  const result=await wizard(['4'],[],{config:saved}).run();
+  assert.equal(result.config.hostOnly,false);assert.equal(result.offline,false);assert.equal(result.portableOnly,false);
+});
